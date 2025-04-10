@@ -1,0 +1,27 @@
+# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
+
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: deploy-test
+
+# 手动触发
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+    steps:
+      - name: create execution environment
+        uses: sayyid5416/pyinstaller@v1
+        with:
+          spec-file: 'main.py'
+          python_version: '3.9'
+          pyinstaller_version: '4.9'
+          platform: 'windows'
+          options: --onefile, --name "love_heart", --windowed,

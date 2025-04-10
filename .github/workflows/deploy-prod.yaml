@@ -1,0 +1,103 @@
+# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
+
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: deploy-prod
+
+on:
+  #  push:
+  #    branches:
+  #      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: deploy
+
+
+
+    steps:
+
+      - name: Check Ref Type
+        run: |
+          if [[ ${{ github.ref_type }} != 'tag' ]]; then
+            echo " ${GITHUB_REF#refs/heads/} : ${{ github.event.repository.name }} is not tag"
+            exit 1
+          fi    
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name:  mvn clean package -DskipTests
+        run: |
+          cd /app/_work/lab/lab
+          mvn clean package -DskipTests
+      - name: deploy
+        run: mv -f  /app/_work/lab/lab/target/lab-0.2.0-SNAPSHOT.jar /oscollege-frontend-apps-default/backend/beta.oscollege.net/app.jar
+      
+
+
+      - name: envsubst
+        id: set_date
+        run: |
+          response=$(curl -X GET https://beta.oscollege.net/api/version)
+          before_version=$(echo "$response" | jq -r '.version')
+          before_date=$(echo "$response" | jq -r '.date')
+          DATE=$(date +'%Y-%m-%d %H:%M:%S')
+          echo "::set-output name=before_version::$before_version"
+          echo "::set-output name=before_date::$before_date"
+          echo "::set-output name=date::$DATE"
+          CURRENT_BRANCH=${GITHUB_REF#refs/heads/}
+          echo "$DATE"
+          kubectl patch configmap www-oscollege-net-api-config -n oscollege-prod --type merge -p '{"data": {"version.yaml": "app:\n  version: '"$CURRENT_BRANCH"'\n  appName:  www-oscollege-net-api\n  date: '"$DATE"'"}}'
+          kubectl rollout restart deployment www-oscollege-net-api -n oscollege-prod
+
+
+
+
+
+
+
+
+
+
+      - name: Sleep for 65s
+        run: sleep 65
+      
+      - name: Send message to DingTalk
+        run: |
+          response=$(curl -X GET https://beta.oscollege.net/api/version)
+          now_version=$(echo "$response" | jq -r '.version')
+          now_date=$(echo "$response" | jq -r '.date')
+          CURRENT_BRANCH=${GITHUB_REF#refs/heads/}
+          echo "now_version: $now_version"
+          echo "CURRENT_BRANCH $CURRENT_BRANCH"
+          echo "now_date $now_date"
+          echo "date ${{ steps.set_date.outputs.date }}"
+          if [ "$now_version" = "$CURRENT_BRANCH" ] && [ "$now_date" = "${{ steps.set_date.outputs.date }}" ]; then
+              curl -H "Content-Type: application/json" -X POST -d '{
+                "msgtype": "markdown",
+                "markdown": {
+                  "title": "github发布${{github.event.repository.name}}完成",
+                  "text": "### <font color=Green>github发布'"${{ github.event.repository.name }}"'完成</font>\n\n\n|                 | <font color=Darkorange>**before**</font>   | <font color=Green>**after**</font>                   |\n| --------------: | ------------- | ---------------------------- |\n| <small>**version:**</small>    | <small><font color=Darkorange>'"${{ steps.set_date.outputs.before_version }}"'<font></small>           | <small><font color=Green>'"$CURRENT_BRANCH"'<font></small> |\n| <small>**deployAt:**</small>   | <small><font color=Darkorange>'"${{ steps.set_date.outputs.before_date }}"'<font></small> | <small><font color=Green>'" ${{ steps.set_date.outputs.date }} "'<font></small> |\n\n #### 发布人: '"${{ github.actor }}"' \n \n\n\n[开源大学堂链接](https://beta.oscollege.net)"
+                },
+                "at": {
+                  "isAtAll": true
+                }
+              }' "https://oapi.dingtalk.com/robot/send?access_token=39a9bf4ada9fc60931e76c6a648a94472bed0e19500587ff9dc40fc55ce733ab"
+          else       
+              curl -H "Content-Type: application/json" -X POST -d '{
+                "msgtype": "markdown",
+                "markdown": {
+                  "title": "github发布${{github.event.repository.name}}失败",
+                  "text": "### <font color=Red>github发布'"${{ github.event.repository.name }}"'未通过</font> \n  <font color=Orange>请先查看[发布版本](https://beta.oscollege.net/api/version)是否误报,再查询问题</font>\n\n\n|                 | <font color=Darkorange>**before**</font>   | <font color=Green>**after**</font>                   |\n| --------------: | ------------- | ---------------------------- |\n| <small>**version:**</small>    | <small><font color=Darkorange>'"${{ steps.set_date.outputs.before_version }}"'<font></small>           | <small><font color=Green>'"$CURRENT_BRANCH"'<font></small>  |\n|  <small>**deployAt:**</small>   | <small><font color=Darkorange>'"${{ steps.set_date.outputs.before_date }}"'<font></small> | <small><font color=Green>'" ${{ steps.set_date.outputs.date }} "'<font></small> |\n\n #### 发布人: '"${{ github.actor }}"' \n \n\n\n[开源大学堂链接](https://beta.oscollege.net)"
+                },
+                "at": {
+                  "isAtAll": true
+                }
+              }' "https://oapi.dingtalk.com/robot/send?access_token=39a9bf4ada9fc60931e76c6a648a94472bed0e19500587ff9dc40fc55ce733ab"
+          fi
