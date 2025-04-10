@@ -1,4 +1,5 @@
 from time import sleep
 
-print("Hello World")
+# 打印到控制台
+print("Hello, World!")
 sleep(10)

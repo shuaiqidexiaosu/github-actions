@@ -22,4 +22,5 @@ jobs:
           python_ver: '3.12'
           spec: 'main.py'
           upload_exe_with_name: 'sjy'
-          options: --onefile, --name "love_heart", --windowed,
+          options: --onefile, --name "sjy"
+
